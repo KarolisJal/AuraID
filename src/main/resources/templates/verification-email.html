@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Email Verification</title>
+</head>
+<body>
+    <h2>Welcome to Aura ID!</h2>
+    <p>Please verify your email address by clicking the link below:</p>
+    <p>
+        <a th:href="${verificationLink}">Verify Email Address</a>
+    </p>
+    <p>If you didn't create an account, you can safely ignore this email.</p>
+    <p>Best regards,<br/>The Aura ID Team</p>
+</body>
+</html> 
