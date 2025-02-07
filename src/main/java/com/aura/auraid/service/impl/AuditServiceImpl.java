@@ -5,7 +5,9 @@ import com.aura.auraid.repository.AuditLogRepository;
 import com.aura.auraid.service.AuditService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +41,11 @@ public class AuditServiceImpl implements AuditService {
                 .build();
 
         auditLogRepository.save(auditLog);
+    }
+
+    @Override
+    public List<AuditLog> getRecentLogs(int limit) {
+        return auditLogRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, limit));
     }
 
     private String getClientIp(HttpServletRequest request) {

@@ -87,19 +87,32 @@ public class AuthServiceImpl implements AuthService {
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
         user.setCountry(request.getCountry());
-        user.setStatus(UserStatus.INACTIVE); // Set as inactive until email is verified
 
         Set<Role> roles = new HashSet<>();
-        Role userRole = roleRepository.findByName(ERole.USER)
-                .orElseThrow(() -> new RuntimeException("Default role not found"));
-        roles.add(userRole);
-        user.setRoles(roles);
-
-        User savedUser = userRepository.save(user);
         
-        // Generate and send verification token
-        String verificationToken = generateVerificationToken(savedUser.getId());
-        emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken);
+        // Check if this is the first user
+        if (userRepository.count() == 0) {
+            // First user gets ADMIN role and is automatically activated
+            roles.add(roleRepository.findByName(ERole.ADMIN)
+                .orElseThrow(() -> new RuntimeException("Admin role not found")));
+            user.setStatus(UserStatus.ACTIVE);  // Auto-activate first user
+        } else {
+            // All other users get regular USER role and need verification
+            user.setStatus(UserStatus.INACTIVE);
+        }
+        
+        // Always add USER role
+        roles.add(roleRepository.findByName(ERole.USER)
+            .orElseThrow(() -> new RuntimeException("Default role not found")));
+        
+        user.setRoles(roles);
+        User savedUser = userRepository.save(user);
+
+        // Send verification email only for non-first users
+        if (userRepository.count() > 1) {
+            String verificationToken = generateVerificationToken(savedUser.getId());
+            emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken);
+        }
 
         var userDetails = createUserDetails(savedUser);
         var token = jwtService.generateToken(userDetails);

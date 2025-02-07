@@ -17,4 +17,6 @@ public interface UserService {
     void updateUserStatus(String username, UserStatus status);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
+    long getTotalUsers();
+    long getActiveUsers();
 } 

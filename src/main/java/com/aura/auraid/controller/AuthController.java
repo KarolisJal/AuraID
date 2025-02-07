@@ -6,7 +6,9 @@ import com.aura.auraid.dto.CreateUserDTO;
 import com.aura.auraid.dto.VerificationResponse;
 import com.aura.auraid.dto.PasswordResetRequestDTO;
 import com.aura.auraid.dto.PasswordResetDTO;
+import com.aura.auraid.dto.VerificationRequest;
 import com.aura.auraid.service.AuthService;
+import com.aura.auraid.service.EmailService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -14,14 +16,17 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
 
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 @Tag(name = "Authentication", description = "Authentication management APIs")
+@CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true")
 public class AuthController {
 
     private final AuthService authService;
+    private final EmailService emailService;
 
     @Operation(
         summary = "Login user",
@@ -54,5 +59,30 @@ public class AuthController {
     public ResponseEntity<VerificationResponse> resetPassword(
             @Valid @RequestBody PasswordResetDTO request) {
         return ResponseEntity.ok(authService.resetPassword(request));
+    }
+
+    @Operation(
+        summary = "Test email integration",
+        description = "Send a test email to verify SendGrid integration"
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Test email sent successfully"
+    )
+    @PostMapping("/test-email")
+    public ResponseEntity<String> testEmail(@RequestParam String email) {
+        try {
+            emailService.sendVerificationEmail(email, "test-token-123");
+            return ResponseEntity.ok("Test email sent successfully to: " + email);
+        } catch (Exception e) {
+            return ResponseEntity.status(500)
+                .body("Failed to send email: " + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Verify email address")
+    @PostMapping("/verify")
+    public ResponseEntity<VerificationResponse> verifyEmail(@Valid @RequestBody VerificationRequest request) {
+        return ResponseEntity.ok(authService.verifyEmail(request.getToken()));
     }
 } 

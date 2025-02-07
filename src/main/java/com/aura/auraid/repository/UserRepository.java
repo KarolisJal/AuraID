@@ -25,4 +25,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByFirstNameContainingOrLastNameContaining(String firstName, String lastName);
     
     List<User> findByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
+
+    long countByStatus(UserStatus status);
 } 
