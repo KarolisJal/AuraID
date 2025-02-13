@@ -17,6 +17,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.List;
 
@@ -87,6 +89,17 @@ public class UserController {
             userService.getUsersByStatus(status) : 
             userService.getAllUsers();
         return ResponseEntity.ok(users);
+    }
+
+    @GetMapping("/me")
+    @Operation(
+            summary = "Get current user",
+            description = "Retrieve the currently authenticated user's information"
+    )
+    @ApiResponse(responseCode = "200", description = "Current user details retrieved successfully")
+    public ResponseEntity<UserDTO> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
+        UserDTO user = userService.getUserByUsername(userDetails.getUsername());
+        return ResponseEntity.ok(user);
     }
 
     @PreAuthorize("hasRole('ADMIN') or @securityUtils.isCurrentUser(#username)")

@@ -4,6 +4,7 @@ import com.aura.auraid.config.JwtProperties;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class JwtService {
 
     private final JwtProperties jwtProperties;
@@ -29,7 +31,7 @@ public class JwtService {
         Map<String, Object> extraClaims = new HashMap<>();
         extraClaims.put("authorities", userDetails.getAuthorities().stream()
             .map(GrantedAuthority::getAuthority)
-            .collect(Collectors.toList()));
+            .toList());
             
         return generateToken(extraClaims, userDetails);
     }
@@ -45,17 +47,38 @@ public class JwtService {
                 .compact();
     }
 
-    public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+    public boolean isTokenValid(String token, UserDetails userDetails) {
+        if (token == null || userDetails == null) {
+            return false;
+        }
+        try {
+            final String username = extractUsername(token);
+            return username != null && 
+                   username.equals(userDetails.getUsername()) && 
+                   !isTokenExpired(token);
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
     }
 
-    public boolean isTokenValid(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
+    public String extractUsername(String token) {
+        if (token == null) {
+            return null;
+        }
+        try {
+            return extractClaim(token, Claims::getSubject);
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+        try {
+            Date expiration = extractExpiration(token);
+            return expiration != null && expiration.before(new Date());
+        } catch (JwtException | IllegalArgumentException e) {
+            return true;
+        }
     }
 
     private Date extractExpiration(String token) {
@@ -64,15 +87,23 @@ public class JwtService {
 
     private <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
-        return claimsResolver.apply(claims);
+        return claims != null ? claimsResolver.apply(claims) : null;
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
+        if (token == null) {
+            return null;
+        }
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+        } catch (JwtException | IllegalArgumentException e) {
+            log.debug("Failed to parse JWT token: {}", e.getMessage());
+            return null;
+        }
     }
 
     private Key getSigningKey() {
@@ -82,15 +113,22 @@ public class JwtService {
 
     @SuppressWarnings("unchecked")
     public Collection<? extends GrantedAuthority> extractAuthorities(String token) {
-        Claims claims = extractAllClaims(token);
-        List<String> authorities = claims.get("authorities", List.class);
-        
-        if (authorities != null) {
+        try {
+            Claims claims = extractAllClaims(token);
+            if (claims == null) {
+                return Collections.emptyList();
+            }
+            
+            List<String> authorities = claims.get("authorities", List.class);
+            if (authorities == null) {
+                return Collections.emptyList();
+            }
+            
             return authorities.stream()
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toList());
+        } catch (JwtException | IllegalArgumentException e) {
+            return Collections.emptyList();
         }
-        
-        return Collections.emptyList();
     }
 } 

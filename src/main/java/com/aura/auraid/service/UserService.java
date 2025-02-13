@@ -4,7 +4,9 @@ import com.aura.auraid.dto.CreateUserDTO;
 import com.aura.auraid.dto.UpdateUserDTO;
 import com.aura.auraid.dto.UserDTO;
 import com.aura.auraid.enums.UserStatus;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public interface UserService {
     UserDTO createUser(CreateUserDTO createUserDTO);
@@ -19,4 +21,14 @@ public interface UserService {
     boolean existsByEmail(String email);
     long getTotalUsers();
     long getActiveUsers();
+    long getNewUsersCount(LocalDateTime since);
+    List<UserDTO> getUsersByCreationDateRange(LocalDateTime start, LocalDateTime end);
+    LocalDateTime getLastLoginTime(String username);
+    LocalDateTime getLastPasswordChangeTime(String username);
+    List<Map<String, Object>> getActiveDevices(String username);
+    List<Map<String, Object>> getActiveSessionsForUser(String username);
+    List<Map<String, Object>> getRecentSuspiciousActivities(String username);
+    boolean isMfaEnabled(String username);
+    String getPasswordStrength(String username);
+    Map<String, Long> getCountryDistribution();
 } 
