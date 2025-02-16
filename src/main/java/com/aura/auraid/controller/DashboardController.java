@@ -42,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ClassLoadingMXBean;
+import com.aura.auraid.service.SystemMetricsService;
 
 @RestController
 @RequestMapping("/api/v1/dashboard")
@@ -55,6 +56,7 @@ public class DashboardController {
     private final UserService userService;
     private final AuditService auditService;
     private final CustomMetrics customMetrics;
+    private final SystemMetricsService systemMetricsService;
     private static final Logger log = LoggerFactory.getLogger(DashboardController.class);
 
     @GetMapping("/stats")
@@ -242,16 +244,28 @@ public class DashboardController {
     @GetMapping("/performance-metrics")
     @Operation(summary = "Get system performance metrics", 
               description = "Get detailed system performance metrics over time")
-    public ResponseEntity<Map<String, Object>> getPerformanceMetrics() {
+    public ResponseEntity<Map<String, Object>> getPerformanceMetrics(
+            @RequestParam(defaultValue = "60") @Min(1) @Max(3600) int seconds,
+            @RequestParam(defaultValue = "false") boolean highResolution) {
         Map<String, Object> metrics = new HashMap<>();
         
-        // JVM Metrics
+        // Get metrics based on resolution
+        if (highResolution) {
+            metrics.put("metrics", systemMetricsService.getHighResolutionMetrics(seconds));
+        } else {
+            metrics.put("metrics", systemMetricsService.getMetricsHistory(seconds / 60));
+        }
+        
+        // Add summary statistics
+        metrics.put("summary", systemMetricsService.getMetricsSummary());
+        
+        // Add JVM metrics
         metrics.put("jvm", getDetailedJvmMetrics());
         
-        // Response Time Metrics
+        // Add response time metrics
         metrics.put("responseTime", getResponseTimeMetrics());
         
-        // Error Rate Metrics
+        // Add error rate metrics
         metrics.put("errorRates", getErrorRateMetrics());
         
         return ResponseEntity.ok(metrics);
@@ -274,6 +288,14 @@ public class DashboardController {
         return ResponseEntity.ok(behavior);
     }
 
+    @GetMapping("/metrics/history")
+    @Operation(summary = "Get historical metrics", 
+              description = "Get system metrics history for the specified time period")
+    public ResponseEntity<Map<String, Object>> getMetricsHistory(
+            @RequestParam(defaultValue = "60") @Min(1) @Max(1440) int minutes) {
+        return ResponseEntity.ok(systemMetricsService.getMetricsHistory(minutes));
+    }
+
     private Map<String, Object> getUserMetrics() {
         Map<String, Object> metrics = new HashMap<>();
         metrics.put("totalUsers", userService.getTotalUsers());
@@ -285,55 +307,49 @@ public class DashboardController {
     }
 
     private Map<String, Object> getSystemHealth() {
-        RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
-        OperatingSystemMXBean osMXBean = ManagementFactory.getOperatingSystemMXBean();
-        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
-        MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
-        
         Map<String, Object> health = new HashMap<>();
+        
+        // Get latest metrics
+        Map<String, Object> latestMetrics = systemMetricsService.getLatestMetrics();
+        @SuppressWarnings("unchecked")
+        Map<String, Double> metrics = (Map<String, Double>) latestMetrics.getOrDefault("metrics", new HashMap<String, Double>());
         
         // Basic Status
         health.put("status", "UP");
-        health.put("timestamp", LocalDateTime.now());
-        
-        // Runtime Metrics
-        Map<String, Object> runtime = new HashMap<>();
-        runtime.put("uptime", runtimeMXBean.getUptime());
-        runtime.put("startTime", LocalDateTime.ofInstant(
-            Instant.ofEpochMilli(runtimeMXBean.getStartTime()), 
-            ZoneId.systemDefault()));
-        health.put("runtime", runtime);
+        health.put("timestamp", latestMetrics.get("timestamp"));
         
         // Memory Metrics
         Map<String, Object> memory = new HashMap<>();
-        MemoryUsage heapMemory = memoryMXBean.getHeapMemoryUsage();
-        MemoryUsage nonHeapMemory = memoryMXBean.getNonHeapMemoryUsage();
-        
-        memory.put("heapUsed", heapMemory.getUsed());
-        memory.put("heapMax", heapMemory.getMax());
-        memory.put("heapUtilization", (double) heapMemory.getUsed() / heapMemory.getMax() * 100);
-        memory.put("nonHeapUsed", nonHeapMemory.getUsed());
+        memory.put("heapUsed", metrics.get("heapUsed"));
+        memory.put("heapCommitted", metrics.get("heapCommitted"));
+        memory.put("heapMax", metrics.get("heapMax"));
+        memory.put("heapUtilization", metrics.get("heapUtilization"));
+        memory.put("nonHeapUsed", metrics.get("nonHeapUsed"));
+        memory.put("nonHeapCommitted", metrics.get("nonHeapCommitted"));
         health.put("memory", memory);
         
         // Thread Metrics
         Map<String, Object> threads = new HashMap<>();
-        threads.put("threadCount", threadMXBean.getThreadCount());
-        threads.put("peakThreadCount", threadMXBean.getPeakThreadCount());
-        threads.put("daemonThreadCount", threadMXBean.getDaemonThreadCount());
+        threads.put("threadCount", metrics.get("threadCount"));
+        threads.put("peakThreadCount", metrics.get("peakThreadCount"));
+        threads.put("daemonThreadCount", metrics.get("daemonThreadCount"));
+        threads.put("totalStartedThreadCount", metrics.get("totalStartedThreadCount"));
+        threads.put("deadlockedThreads", metrics.get("deadlockedThreads"));
         health.put("threads", threads);
         
         // System Metrics
         Map<String, Object> system = new HashMap<>();
-        system.put("availableProcessors", osMXBean.getAvailableProcessors());
-        if (osMXBean instanceof com.sun.management.OperatingSystemMXBean) {
-            com.sun.management.OperatingSystemMXBean sunOsMXBean = 
-                (com.sun.management.OperatingSystemMXBean) osMXBean;
-            system.put("systemCpuLoad", sunOsMXBean.getCpuLoad() * 100);
-            system.put("processCpuLoad", sunOsMXBean.getProcessCpuLoad() * 100);
-            system.put("freePhysicalMemory", sunOsMXBean.getFreeMemorySize());
-            system.put("totalPhysicalMemory", sunOsMXBean.getTotalMemorySize());
-        }
+        system.put("systemCpuLoad", metrics.get("systemCpuLoad"));
+        system.put("processCpuLoad", metrics.get("processCpuLoad"));
+        system.put("freePhysicalMemory", metrics.get("freePhysicalMemory"));
+        system.put("totalPhysicalMemory", metrics.get("totalPhysicalMemory"));
+        system.put("committedVirtualMemory", metrics.get("committedVirtualMemory"));
+        system.put("processCpuTime", metrics.get("processCpuTime"));
         health.put("system", system);
+        
+        // Add historical summary with percentiles
+        Map<String, Object> metricsSummary = systemMetricsService.getMetricsSummary();
+        health.put("summary", metricsSummary);
         
         return health;
     }
@@ -411,36 +427,69 @@ public class DashboardController {
     private Map<String, Object> getDetailedJvmMetrics() {
         Map<String, Object> jvmMetrics = new HashMap<>();
         
+        // Get latest metrics
+        Map<String, Object> latestMetrics = systemMetricsService.getLatestMetrics();
+        @SuppressWarnings("unchecked")
+        Map<String, Double> metrics = (Map<String, Double>) latestMetrics.getOrDefault("metrics", new HashMap<String, Double>());
+        
         // Garbage Collection Metrics
-        List<GarbageCollectorMXBean> gcBeans = ManagementFactory.getGarbageCollectorMXBeans();
         Map<String, Object> gcMetrics = new HashMap<>();
-        gcBeans.forEach(gc -> {
-            Map<String, Object> gcStats = new HashMap<>();
-            gcStats.put("collectionCount", gc.getCollectionCount());
-            gcStats.put("collectionTime", gc.getCollectionTime());
-            gcMetrics.put(gc.getName(), gcStats);
-        });
+        metrics.entrySet().stream()
+            .filter(entry -> entry.getKey().startsWith("gc_"))
+            .forEach(entry -> gcMetrics.put(
+                entry.getKey().substring(3), 
+                entry.getValue()));
         jvmMetrics.put("gc", gcMetrics);
         
-        // Class Loading Metrics
-        ClassLoadingMXBean classLoadingBean = ManagementFactory.getClassLoadingMXBean();
-        Map<String, Object> classLoading = new HashMap<>();
-        classLoading.put("loadedClassCount", classLoadingBean.getLoadedClassCount());
-        classLoading.put("totalLoadedClassCount", classLoadingBean.getTotalLoadedClassCount());
-        classLoading.put("unloadedClassCount", classLoadingBean.getUnloadedClassCount());
-        jvmMetrics.put("classLoading", classLoading);
+        // Memory Metrics
+        Map<String, Object> memoryMetrics = new HashMap<>();
+        memoryMetrics.put("heapUsed", metrics.get("heapUsed"));
+        memoryMetrics.put("heapCommitted", metrics.get("heapCommitted"));
+        memoryMetrics.put("heapMax", metrics.get("heapMax"));
+        memoryMetrics.put("heapUtilization", metrics.get("heapUtilization"));
+        memoryMetrics.put("nonHeapUsed", metrics.get("nonHeapUsed"));
+        memoryMetrics.put("nonHeapCommitted", metrics.get("nonHeapCommitted"));
+        jvmMetrics.put("memory", memoryMetrics);
+        
+        // Thread Metrics
+        Map<String, Object> threadMetrics = new HashMap<>();
+        threadMetrics.put("count", metrics.get("threadCount"));
+        threadMetrics.put("peakCount", metrics.get("peakThreadCount"));
+        threadMetrics.put("daemonCount", metrics.get("daemonThreadCount"));
+        threadMetrics.put("totalStarted", metrics.get("totalStartedThreadCount"));
+        threadMetrics.put("deadlocked", metrics.get("deadlockedThreads"));
+        jvmMetrics.put("threads", threadMetrics);
         
         return jvmMetrics;
     }
 
     private Map<String, Object> getResponseTimeMetrics() {
-        // This would be implemented with actual response time tracking
-        // For now, returning placeholder data
-        Map<String, Object> metrics = new HashMap<>();
-        metrics.put("averageResponseTime", 150); // ms
-        metrics.put("p95ResponseTime", 250); // ms
-        metrics.put("p99ResponseTime", 500); // ms
-        return metrics;
+        Map<String, Object> latestMetrics = systemMetricsService.getLatestMetrics();
+        @SuppressWarnings("unchecked")
+        Map<String, Double> metrics = (Map<String, Double>) latestMetrics.getOrDefault("metrics", new HashMap<String, Double>());
+        
+        Map<String, Object> responseMetrics = new HashMap<>();
+        responseMetrics.put("average", metrics.get("responseTime_avg"));
+        responseMetrics.put("max", metrics.get("responseTime_max"));
+        responseMetrics.put("min", metrics.get("responseTime_min"));
+        
+        // Add operation-specific metrics
+        Map<String, Map<String, Object>> operationMetrics = new HashMap<>();
+        metrics.entrySet().stream()
+            .filter(entry -> entry.getKey().contains("_mean") || 
+                           entry.getKey().contains("_max") || 
+                           entry.getKey().contains("_count"))
+            .forEach(entry -> {
+                String[] parts = entry.getKey().split("_");
+                String operation = parts[0];
+                String metric = parts[1];
+                
+                operationMetrics.computeIfAbsent(operation, k -> new HashMap<>())
+                    .put(metric, entry.getValue());
+            });
+        responseMetrics.put("operations", operationMetrics);
+        
+        return responseMetrics;
     }
 
     private Map<String, Object> getErrorRateMetrics() {

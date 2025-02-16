@@ -66,8 +66,4 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     private UserStatus status = UserStatus.ACTIVE;
-
-    private LocalDateTime lastLoginAt;
-    private LocalDateTime passwordChangedAt;
-    private boolean mfaEnabled;
 } 

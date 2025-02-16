@@ -15,18 +15,22 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 @Tag(name = "Authentication", description = "Authentication management APIs")
 @CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true")
+@Slf4j
 public class AuthController {
 
     private final AuthService authService;
     private final EmailService emailService;
+    private final PasswordEncoder passwordEncoder;
 
     @Operation(
         summary = "Login user",
@@ -84,5 +88,11 @@ public class AuthController {
     @PostMapping("/verify")
     public ResponseEntity<VerificationResponse> verifyEmail(@Valid @RequestBody VerificationRequest request) {
         return ResponseEntity.ok(authService.verifyEmail(request.getToken()));
+    }
+
+    @GetMapping("/generate-hash/{password}")
+    @Operation(summary = "Generate password hash", description = "Temporary endpoint to generate BCrypt hash")
+    public String generateHash(@PathVariable String password) {
+        return passwordEncoder.encode(password);
     }
 } 

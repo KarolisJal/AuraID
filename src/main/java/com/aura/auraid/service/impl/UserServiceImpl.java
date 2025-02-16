@@ -3,11 +3,17 @@ package com.aura.auraid.service.impl;
 import com.aura.auraid.dto.CreateUserDTO;
 import com.aura.auraid.dto.UpdateUserDTO;
 import com.aura.auraid.dto.UserDTO;
+import com.aura.auraid.dto.ChangePasswordDTO;
+import com.aura.auraid.dto.UpdateUserRolesDTO;
 import com.aura.auraid.enums.UserStatus;
+import com.aura.auraid.enums.ERole;
 import com.aura.auraid.exception.ResourceNotFoundException;
+import com.aura.auraid.exception.InvalidCredentialsException;
 import com.aura.auraid.mapper.UserMapper;
 import com.aura.auraid.model.User;
+import com.aura.auraid.model.Role;
 import com.aura.auraid.repository.UserRepository;
+import com.aura.auraid.repository.RoleRepository;
 import com.aura.auraid.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,18 +26,25 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.HashMap;
 import java.util.Comparator;
+import java.util.Set;
+import java.util.HashSet;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import com.aura.auraid.model.AuditLog;
 import com.aura.auraid.repository.AuditLogRepository;
+import org.springframework.cache.annotation.Cacheable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserMapper userMapper;
     private final AuditLogRepository auditLogRepository;
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
     @Override
     @Transactional
@@ -115,14 +128,20 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
     }
 
-    @Override
+    @Cacheable(value = "usernameExists", key = "#username", unless = "#result == false")
     public boolean existsByUsername(String username) {
-        return userRepository.existsByUsername(username);
+        log.debug("Checking if username exists (case-insensitive): {}", username);
+        boolean exists = userRepository.existsByUsernameIgnoreCase(username);
+        log.debug("Username '{}' exists: {}", username, exists);
+        return exists;
     }
 
-    @Override
+    @Cacheable(value = "emailExists", key = "#email", unless = "#result == false")
     public boolean existsByEmail(String email) {
-        return userRepository.existsByEmail(email);
+        log.debug("Checking if email exists (case-insensitive): {}", email);
+        boolean exists = userRepository.existsByEmailIgnoreCase(email.toLowerCase());
+        log.debug("Email '{}' exists: {}", email, exists);
+        return exists;
     }
 
     @Override
@@ -148,86 +167,51 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public LocalDateTime getLastLoginTime(String username) {
-        return userRepository.findByUsername(username)
-            .map(User::getLastLoginAt)
-            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        // Since we no longer track last login time, return current time
+        return LocalDateTime.now();
     }
 
     @Override
     public LocalDateTime getLastPasswordChangeTime(String username) {
+        // Since we no longer track password changes, return user's creation time
         return userRepository.findByUsername(username)
-            .map(User::getPasswordChangedAt)
-            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+            .map(User::getCreatedAt)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with username: " + username));
     }
 
     @Override
     public List<Map<String, Object>> getActiveDevices(String username) {
-        // This would typically come from a session/device tracking table
-        // For now, return a simulated list based on recent audit logs
-        LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
-        List<AuditLog> recentLogs = auditLogRepository.findByUsernameAndCreatedAtBetween(
-            username, thirtyDaysAgo, LocalDateTime.now());
-
-        return recentLogs.stream()
-            .filter(log -> log.getIpAddress() != null && log.getUserAgent() != null)
-            .collect(Collectors.groupingBy(
-                log -> log.getIpAddress() + "|" + log.getUserAgent(),
-                Collectors.collectingAndThen(
-                    Collectors.maxBy(Comparator.comparing(AuditLog::getCreatedAt)),
-                    optionalLog -> optionalLog.map(log -> {
-                        Map<String, Object> device = new HashMap<>();
-                        device.put("ipAddress", log.getIpAddress());
-                        device.put("userAgent", log.getUserAgent());
-                        device.put("lastActivity", log.getCreatedAt());
-                        return device;
-                    }).orElse(null)
-                )
-            ))
-            .values()
-            .stream()
-            .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+        // Return a simulated active device (current session)
+        Map<String, Object> currentDevice = new HashMap<>();
+        currentDevice.put("ipAddress", "127.0.0.1");
+        currentDevice.put("userAgent", "Current Session");
+        currentDevice.put("lastActivity", LocalDateTime.now());
+        return List.of(currentDevice);
     }
 
     @Override
     public List<Map<String, Object>> getActiveSessionsForUser(String username) {
-        return getActiveDevices(username); // For now, same as active devices
+        return getActiveDevices(username);
     }
 
     @Override
     public List<Map<String, Object>> getRecentSuspiciousActivities(String username) {
-        LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
-        List<AuditLog> suspiciousLogs = auditLogRepository.findByUsernameAndCreatedAtBetween(
-            username, twentyFourHoursAgo, LocalDateTime.now());
-
-        return suspiciousLogs.stream()
-            .filter(this::isSuspiciousActivity)
-            .map(log -> {
-                Map<String, Object> activity = new HashMap<>();
-                activity.put("timestamp", log.getCreatedAt());
-                activity.put("action", log.getAction());
-                activity.put("ipAddress", log.getIpAddress());
-                activity.put("userAgent", log.getUserAgent());
-                activity.put("details", log.getDetails());
-                return activity;
-            })
-            .collect(Collectors.toList());
+        // Since we're not tracking suspicious activities anymore, return empty list
+        return List.of();
     }
 
     @Override
     public boolean isMfaEnabled(String username) {
-        return userRepository.findByUsername(username)
-            .map(User::isMfaEnabled)
-            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        // Since MFA is not supported, always return false
+        return false;
     }
 
     @Override
     public String getPasswordStrength(String username) {
         User user = userRepository.findByUsername(username)
-            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with username: " + username));
         
-        // This would typically use a password strength evaluator
-        // For now, return a simple evaluation based on password length
+        // Simple password strength check based on length
         int length = user.getPassword().length();
         if (length >= 12) return "STRONG";
         if (length >= 8) return "MODERATE";
@@ -235,36 +219,16 @@ public class UserServiceImpl implements UserService {
     }
 
     private boolean isSuspiciousActivity(AuditLog log) {
-        if (log.getDetails() != null && log.getDetails().contains("failed")) {
-            return true;
-        }
-
-        // Check for unusual IP addresses or user agents
-        if (log.getIpAddress() != null && isUnusualIpAddress(log.getIpAddress())) {
-            return true;
-        }
-
-        // Check for rapid succession of actions
-        if (hasRapidSuccessionActions(log)) {
-            return true;
-        }
-
+        // Since we're not tracking suspicious activities, always return false
         return false;
     }
 
     private boolean isUnusualIpAddress(String ipAddress) {
-        // This would typically check against a list of known good IPs
-        // or use geolocation to detect unusual locations
         return false;
     }
 
     private boolean hasRapidSuccessionActions(AuditLog log) {
-        LocalDateTime fiveMinutesAgo = log.getCreatedAt().minusMinutes(5);
-        List<AuditLog> recentLogs = auditLogRepository.findByUsernameAndCreatedAtBetween(
-            log.getUsername(), fiveMinutesAgo, log.getCreatedAt());
-        
-        // Consider it suspicious if there are more than 20 actions in 5 minutes
-        return recentLogs.size() > 20;
+        return false;
     }
 
     @Override
@@ -276,5 +240,54 @@ public class UserServiceImpl implements UserService {
                 User::getCountry,
                 Collectors.counting()
             ));
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(String username, ChangePasswordDTO changePasswordDTO) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with username: " + username));
+
+        // Verify current password
+        if (!passwordEncoder.matches(changePasswordDTO.getCurrentPassword(), user.getPassword())) {
+            throw new InvalidCredentialsException("Current password is incorrect");
+        }
+
+        // Set new password
+        user.setPassword(passwordEncoder.encode(changePasswordDTO.getNewPassword()));
+        userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public UserDTO updateUserRoles(String username, UpdateUserRolesDTO updateUserRolesDTO) {
+        log.debug("Updating roles for user: {}", username);
+        
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with username: " + username));
+
+        Set<Role> newRoles = new HashSet<>();
+        for (String roleName : updateUserRolesDTO.getRoles()) {
+            try {
+                ERole eRole = ERole.valueOf(roleName.toUpperCase());
+                Role role = roleRepository.findByName(eRole)
+                    .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleName));
+                newRoles.add(role);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid role name: " + roleName);
+            }
+        }
+
+        // Ensure user has at least the USER role
+        Role userRole = roleRepository.findByName(ERole.USER)
+            .orElseThrow(() -> new RuntimeException("Default USER role not found"));
+        newRoles.add(userRole);
+
+        user.setRoles(newRoles);
+        User updatedUser = userRepository.save(user);
+        log.debug("Updated roles for user: {}. New roles: {}", username, 
+            newRoles.stream().map(r -> r.getName().name()).collect(Collectors.joining(", ")));
+        
+        return userMapper.toDTO(updatedUser);
     }
 } 

@@ -36,10 +36,10 @@ public class AuditLogAspect {
 
         auditService.logEvent(
             methodName,
-            username != null ? username : "anonymous",
+            username,
             className,
             getEntityId(joinPoint),
-            "Method executed successfully",
+            username == null ? "Method executed by unauthenticated user" : "Method executed successfully",
             request
         );
 
@@ -53,7 +53,7 @@ public class AuditLogAspect {
         
         for (int i = 0; i < parameterNames.length; i++) {
             if (parameterNames[i].equals("id") || parameterNames[i].equals("username")) {
-                return args[i].toString();
+                return args[i] != null ? args[i].toString() : "N/A";
             }
         }
         return "N/A";

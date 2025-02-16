@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.mockito.Mockito.*;
@@ -192,10 +193,13 @@ class UserControllerTest {
         when(userService.existsByUsername("newuser")).thenReturn(false);
 
         // Act
-        ResponseEntity<Boolean> response = userController.checkUsernameAvailability("newuser");
+        ResponseEntity<Map<String, Object>> response = userController.checkUsernameAvailability("newuser", null);
 
         // Assert
-        assertTrue(response.getBody());
+        assertNotNull(response.getBody());
+        assertTrue((Boolean) response.getBody().get("available"));
+        assertEquals("newuser", response.getBody().get("username"));
+        assertFalse(response.getBody().containsKey("message"));
     }
 
     @Test
@@ -204,9 +208,86 @@ class UserControllerTest {
         when(userService.existsByEmail("test@example.com")).thenReturn(true);
 
         // Act
-        ResponseEntity<Boolean> response = userController.checkEmailAvailability("test@example.com");
+        ResponseEntity<Map<String, Object>> response = userController.checkEmailAvailability("test@example.com", null);
 
         // Assert
-        assertFalse(response.getBody());
+        assertNotNull(response.getBody());
+        assertFalse((Boolean) response.getBody().get("available"));
+        assertEquals("test@example.com", response.getBody().get("email"));
+        assertEquals("Email is already registered", response.getBody().get("message"));
+    }
+
+    @Test
+    void checkUsernameAvailability_NotAvailable() {
+        // Arrange
+        when(userService.existsByUsername("existinguser")).thenReturn(true);
+
+        // Act
+        ResponseEntity<Map<String, Object>> response = userController.checkUsernameAvailability("existinguser", null);
+
+        // Assert
+        assertNotNull(response.getBody());
+        assertFalse((Boolean) response.getBody().get("available"));
+        assertEquals("existinguser", response.getBody().get("username"));
+        assertEquals("Username is already taken", response.getBody().get("message"));
+    }
+
+    @Test
+    void checkEmailAvailability_Available() {
+        // Arrange
+        when(userService.existsByEmail("new@example.com")).thenReturn(false);
+
+        // Act
+        ResponseEntity<Map<String, Object>> response = userController.checkEmailAvailability("new@example.com", null);
+
+        // Assert
+        assertNotNull(response.getBody());
+        assertTrue((Boolean) response.getBody().get("available"));
+        assertEquals("new@example.com", response.getBody().get("email"));
+        assertFalse(response.getBody().containsKey("message"));
+    }
+
+    @Test
+    void checkUsernameAvailability_WithRequestParam() {
+        // Arrange
+        when(userService.existsByUsername("testuser")).thenReturn(false);
+
+        // Act
+        ResponseEntity<Map<String, Object>> response = userController.checkUsernameAvailability(null, "testuser");
+
+        // Assert
+        assertNotNull(response.getBody());
+        assertTrue((Boolean) response.getBody().get("available"));
+        assertEquals("testuser", response.getBody().get("username"));
+        assertFalse(response.getBody().containsKey("message"));
+    }
+
+    @Test
+    void checkUsernameAvailability_NoUsername() {
+        // Act & Assert
+        assertThrows(IllegalArgumentException.class, () -> 
+            userController.checkUsernameAvailability(null, null));
+    }
+
+    @Test
+    void checkEmailAvailability_WithRequestParam() {
+        // Arrange
+        when(userService.existsByEmail("test@example.com")).thenReturn(false);
+
+        // Act
+        ResponseEntity<Map<String, Object>> response = userController.checkEmailAvailability(null, "test@example.com");
+
+        // Assert
+        assertNotNull(response.getBody());
+        assertTrue((Boolean) response.getBody().get("available"));
+        assertEquals("test@example.com", response.getBody().get("email"));
+        assertFalse(response.getBody().containsKey("message"));
+    }
+
+    @Test
+    void checkEmailAvailability_NoEmail() {
+        // Act & Assert
+        assertThrows(IllegalArgumentException.class, () -> 
+            userController.checkEmailAvailability(null, null));
     }
 } 

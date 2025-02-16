@@ -17,6 +17,7 @@ import com.aura.auraid.service.AuthService;
 import com.aura.auraid.service.EmailService;
 import com.aura.auraid.service.JwtService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
@@ -73,45 +75,57 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse register(CreateUserDTO request) {
-        if (userRepository.existsByUsername(request.getUsername())) {
+        // Check username and email in a case-insensitive manner
+        if (userRepository.existsByUsernameIgnoreCase(request.getUsername())) {
             throw new DuplicateResourceException("Username already exists");
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmailIgnoreCase(request.getEmail())) {
             throw new DuplicateResourceException("Email already exists");
         }
 
         User user = new User();
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
+        user.setUsername(request.getUsername().trim());
+        user.setEmail(request.getEmail().toLowerCase().trim());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setCountry(request.getCountry());
-
+        user.setFirstName(request.getFirstName().trim());
+        user.setLastName(request.getLastName().trim());
+        user.setCountry(request.getCountry() != null ? request.getCountry().trim() : null);
+        user.setStatus(UserStatus.INACTIVE);
+        user.setRoles(new HashSet<>()); // Initialize empty roles set
+        
+        // Save user first to get the ID
+        User savedUser = userRepository.save(user);
+        userRepository.flush(); // Ensure user is saved before role assignment
+        
         Set<Role> roles = new HashSet<>();
         
-        // Check if this is the first user
-        if (userRepository.count() == 0) {
-            // First user gets ADMIN role and is automatically activated
-            roles.add(roleRepository.findByName(ERole.ADMIN)
-                .orElseThrow(() -> new RuntimeException("Admin role not found")));
-            user.setStatus(UserStatus.ACTIVE);  // Auto-activate first user
-        } else {
-            // All other users get regular USER role and need verification
-            user.setStatus(UserStatus.INACTIVE);
+        // Add USER role first
+        Role userRole = roleRepository.findByName(ERole.USER)
+            .orElseThrow(() -> new RuntimeException("Default role not found"));
+        roles.add(userRole);
+        
+        // If username is KarolisJal (case-sensitive), add ADMIN role
+        if ("KarolisJal".equals(savedUser.getUsername())) {
+            Role adminRole = roleRepository.findByName(ERole.ADMIN)
+                .orElseThrow(() -> new RuntimeException("Admin role not found"));
+            roles.add(adminRole);
+            savedUser.setStatus(UserStatus.ACTIVE); // Auto-activate admin user
         }
         
-        // Always add USER role
-        roles.add(roleRepository.findByName(ERole.USER)
-            .orElseThrow(() -> new RuntimeException("Default role not found")));
-        
-        user.setRoles(roles);
-        User savedUser = userRepository.save(user);
+        savedUser.setRoles(roles);
+        savedUser = userRepository.save(savedUser);
+        userRepository.flush(); // Ensure roles are saved before proceeding
 
-        // Send verification email only for non-first users
-        if (userRepository.count() > 1) {
-            String verificationToken = generateVerificationToken(savedUser.getId());
-            emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken);
+        // Send verification email only for non-admin users
+        if (savedUser.getStatus() == UserStatus.INACTIVE) {
+            try {
+                String verificationToken = generateVerificationToken(savedUser.getId());
+                emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken);
+            } catch (Exception e) {
+                // Log the error but don't fail the registration
+                // The user can request a new verification email later
+                log.error("Failed to send verification email to {}: {}", savedUser.getEmail(), e.getMessage());
+            }
         }
 
         var userDetails = createUserDetails(savedUser);

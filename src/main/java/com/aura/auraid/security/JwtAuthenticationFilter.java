@@ -16,6 +16,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -34,35 +35,62 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
+        String requestURI = request.getRequestURI();
+        
+        // Skip JWT processing for public endpoints
+        if (isPublicEndpoint(requestURI)) {
+            log.debug("Skipping JWT authentication for public endpoint: {}", requestURI);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         final String authHeader = request.getHeader("Authorization");
         final String jwt;
         final String username;
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.debug("No valid Authorization header found for protected endpoint: {}", requestURI);
             filterChain.doFilter(request, response);
             return;
         }
 
         jwt = authHeader.substring(7);
-        username = jwtService.extractUsername(jwt);
+        try {
+            username = jwtService.extractUsername(jwt);
+            log.debug("Processing request for username: {}, URI: {}", username, requestURI);
 
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-            
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                Collection<? extends GrantedAuthority> authorities = jwtService.extractAuthorities(jwt);
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
                 
-                log.debug("User: {}, Authorities: {}", username, authorities);
-                
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                    userDetails,
-                    null,
-                    authorities
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                if (jwtService.isTokenValid(jwt, userDetails)) {
+                    Collection<? extends GrantedAuthority> authorities = jwtService.extractAuthorities(jwt);
+                    log.debug("Token is valid. User: {}, Authorities: {}", username, authorities);
+                    
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails,
+                        null,
+                        authorities
+                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    log.debug("Successfully set authentication in SecurityContext for user: {}", username);
+                } else {
+                    log.warn("Token validation failed for user: {}", username);
+                }
             }
+        } catch (Exception e) {
+            log.error("Error processing JWT token", e);
         }
+        
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isPublicEndpoint(String uri) {
+        return uri.contains("/auth/") || 
+               uri.contains("/check-username") || 
+               uri.contains("/check-email") || 
+               uri.contains("/swagger-ui") || 
+               uri.contains("/v3/api-docs") ||
+               uri.contains("/actuator/health");
     }
 } 

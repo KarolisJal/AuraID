@@ -1,76 +1,70 @@
 package com.aura.auraid.filter;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
+import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.ContentCachingRequestWrapper;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
 import java.util.UUID;
 
-@Slf4j
 @Component
-public class RequestLoggingFilter extends OncePerRequestFilter {
+@Slf4j
+public class RequestLoggingFilter implements Filter {
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, 
-                                  HttpServletResponse response,
-                                  FilterChain filterChain) throws ServletException, IOException {
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        HttpServletRequest httpRequest = (HttpServletRequest) request;
+        HttpServletResponse httpResponse = (HttpServletResponse) response;
         String requestId = UUID.randomUUID().toString();
+        String uri = httpRequest.getRequestURI();
+        
+        boolean isAvailabilityCheck = uri.contains("/check-username") || uri.contains("/check-email");
+        boolean isPublicEndpoint = isPublicEndpoint(uri);
+        
+        // Always log availability checks, otherwise only log non-public endpoints
+        if (isAvailabilityCheck || !isPublicEndpoint) {
+            logRequest(httpRequest, requestId);
+        }
+
         long startTime = System.currentTimeMillis();
+        chain.doFilter(request, response);
+        long duration = System.currentTimeMillis() - startTime;
 
-        ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request);
-        ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
-
-        try {
-            // Log request
-            logRequest(requestWrapper, requestId);
-            
-            // Continue with the filter chain
-            filterChain.doFilter(requestWrapper, responseWrapper);
-            
-            // Log response
-            logResponse(responseWrapper, requestId, System.currentTimeMillis() - startTime);
-        } finally {
-            // Copy content to response
-            responseWrapper.copyBodyToResponse();
+        // Always log availability checks, otherwise only log slow public endpoints
+        if (isAvailabilityCheck || !isPublicEndpoint || duration > 200) {
+            logResponse(httpResponse, requestId, duration);
         }
     }
 
-    private void logRequest(ContentCachingRequestWrapper request, String requestId) {
+    private void logRequest(HttpServletRequest request, String requestId) {
         String queryString = request.getQueryString();
         String path = queryString != null ? 
             request.getRequestURI() + "?" + queryString : 
             request.getRequestURI();
-
-        log.info("Request: [{}] {} {} (Client IP: {})", 
-            requestId,
-            request.getMethod(),
-            path,
-            request.getRemoteAddr()
-        );
+            
+        log.debug("Request: [{}] {} {} (Client IP: {})",
+                requestId,
+                request.getMethod(),
+                path,
+                request.getRemoteAddr());
     }
 
-    private void logResponse(ContentCachingResponseWrapper response, 
-                           String requestId, 
-                           long duration) {
-        log.info("Response: [{}] Status: {} (Duration: {}ms)",
-            requestId,
-            response.getStatus(),
-            duration
-        );
+    private void logResponse(HttpServletResponse response, String requestId, long duration) {
+        log.debug("Response: [{}] Status: {} (Duration: {}ms)",
+                requestId,
+                response.getStatus(),
+                duration);
     }
 
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        return path.contains("/v3/api-docs") || 
-               path.contains("/swagger-ui/") ||
-               path.contains("/actuator/");
+    private boolean isPublicEndpoint(String uri) {
+        return uri.contains("/check-") || 
+               uri.contains("/auth/") || 
+               uri.contains("/swagger-ui") || 
+               uri.contains("/v3/api-docs") ||
+               uri.contains("/actuator/health");
     }
 } 

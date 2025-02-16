@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
+
+    <changeSet id="20240101-add-user-phone" author="auraid">
+        <comment>Add phone number column to users table</comment>
+        
+        <!-- Add the new column -->
+        <addColumn tableName="users">
+            <column name="phone_number" type="varchar(20)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        
+        <!-- Add index for phone number lookups -->
+        <createIndex indexName="idx_user_phone"
+                     tableName="users"
+                     unique="true">
+            <column name="phone_number"/>
+        </createIndex>
+        
+        <!-- Rollback instructions if needed -->
+        <rollback>
+            <dropIndex indexName="idx_user_phone"
+                      tableName="users"/>
+            <dropColumn tableName="users"
+                       columnName="phone_number"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog> 

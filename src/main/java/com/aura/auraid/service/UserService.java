@@ -3,6 +3,8 @@ package com.aura.auraid.service;
 import com.aura.auraid.dto.CreateUserDTO;
 import com.aura.auraid.dto.UpdateUserDTO;
 import com.aura.auraid.dto.UserDTO;
+import com.aura.auraid.dto.ChangePasswordDTO;
+import com.aura.auraid.dto.UpdateUserRolesDTO;
 import com.aura.auraid.enums.UserStatus;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,6 +19,7 @@ public interface UserService {
     UserDTO updateUser(String username, UpdateUserDTO updateUserDTO);
     void deleteUser(String username);
     void updateUserStatus(String username, UserStatus status);
+    UserDTO updateUserRoles(String username, UpdateUserRolesDTO updateUserRolesDTO);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
     long getTotalUsers();
@@ -31,4 +34,5 @@ public interface UserService {
     boolean isMfaEnabled(String username);
     String getPasswordStrength(String username);
     Map<String, Long> getCountryDistribution();
+    void changePassword(String username, ChangePasswordDTO changePasswordDTO);
 } 

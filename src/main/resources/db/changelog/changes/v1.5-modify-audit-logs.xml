@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
+
+    <changeSet id="20240216-modify-audit-logs" author="auraid">
+        <comment>Modify audit_logs table to handle anonymous users</comment>
+        
+        <!-- Drop existing foreign key -->
+        <dropForeignKeyConstraint 
+            baseTableName="audit_logs" 
+            constraintName="audit_logs_username_fkey"/>
+            
+        <!-- Drop NOT NULL constraint from username column -->
+        <dropNotNullConstraint
+            tableName="audit_logs"
+            columnName="username"
+            columnDataType="varchar(50)"/>
+            
+        <!-- Update existing anonymousUser entries to NULL -->
+        <sql>
+            UPDATE audit_logs 
+            SET username = NULL 
+            WHERE username = 'anonymousUser';
+        </sql>
+        
+        <!-- Add new foreign key with ON DELETE SET NULL -->
+        <addForeignKeyConstraint 
+            baseTableName="audit_logs" 
+            baseColumnNames="username" 
+            constraintName="audit_logs_username_fkey" 
+            referencedTableName="users"
+            referencedColumnNames="username"
+            onDelete="SET NULL"/>
+    </changeSet>
+
+</databaseChangeLog> 

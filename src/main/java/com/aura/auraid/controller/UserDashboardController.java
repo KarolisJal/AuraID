@@ -5,15 +5,18 @@ import com.aura.auraid.dto.UserSecurityStatusDTO;
 import com.aura.auraid.dto.UserActivityDTO;
 import com.aura.auraid.service.AuditService;
 import com.aura.auraid.service.UserService;
+import com.aura.auraid.exception.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +29,8 @@ import java.util.*;
 @Tag(name = "User Dashboard", description = "User dashboard endpoints for regular users")
 @SecurityRequirement(name = "bearerAuth")
 @Validated
+@PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_USER')")
+@Slf4j
 public class UserDashboardController {
 
     private final UserService userService;
@@ -36,23 +41,32 @@ public class UserDashboardController {
               description = "Retrieve user's personal dashboard statistics and information")
     public ResponseEntity<UserDashboardStatsDTO> getUserDashboardStats(
             @AuthenticationPrincipal UserDetails userDetails) {
-        
-        String username = userDetails.getUsername();
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime thirtyDaysAgo = now.minusDays(30);
+        try {
+            String username = userDetails.getUsername();
+            log.debug("Fetching dashboard stats for user: {}", username);
+            
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime thirtyDaysAgo = now.minusDays(30);
 
-        Map<String, Object> activitySummary = auditService.getUserActivitySummary(username, thirtyDaysAgo);
-        
-        UserDashboardStatsDTO stats = UserDashboardStatsDTO.builder()
-            .lastLogin(userService.getLastLoginTime(username))
-            .lastPasswordChange(userService.getLastPasswordChangeTime(username))
-            .activeDevices(userService.getActiveDevices(username))
-            .recentActivities(auditService.getUserActivity(username, 5))
-            .activitySummary(activitySummary)
-            .securityStatus(buildUserSecurityStatus(username))
-            .build();
+            Map<String, Object> activitySummary = auditService.getUserActivitySummary(username, thirtyDaysAgo);
+            
+            UserDashboardStatsDTO stats = UserDashboardStatsDTO.builder()
+                .lastLogin(userService.getLastLoginTime(username))
+                .lastPasswordChange(userService.getLastPasswordChangeTime(username))
+                .activeDevices(userService.getActiveDevices(username))
+                .recentActivities(auditService.getUserActivity(username, 5))
+                .activitySummary(activitySummary)
+                .securityStatus(buildUserSecurityStatus(username))
+                .build();
 
-        return ResponseEntity.ok(stats);
+            return ResponseEntity.ok(stats);
+        } catch (ResourceNotFoundException | UsernameNotFoundException e) {
+            log.error("Failed to fetch dashboard stats", e);
+            throw new ResourceNotFoundException(e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error while fetching dashboard stats", e);
+            throw new RuntimeException("Failed to fetch dashboard statistics", e);
+        }
     }
 
     @GetMapping("/security-status")
@@ -60,10 +74,18 @@ public class UserDashboardController {
               description = "Get detailed security status and recommendations")
     public ResponseEntity<UserSecurityStatusDTO> getSecurityStatus(
             @AuthenticationPrincipal UserDetails userDetails) {
-        
-        String username = userDetails.getUsername();
-        UserSecurityStatusDTO securityStatus = buildUserSecurityStatus(username);
-        return ResponseEntity.ok(securityStatus);
+        try {
+            String username = userDetails.getUsername();
+            log.debug("Fetching security status for user: {}", username);
+            UserSecurityStatusDTO securityStatus = buildUserSecurityStatus(username);
+            return ResponseEntity.ok(securityStatus);
+        } catch (ResourceNotFoundException | UsernameNotFoundException e) {
+            log.error("Failed to fetch security status", e);
+            throw new ResourceNotFoundException(e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error while fetching security status", e);
+            throw new RuntimeException("Failed to fetch security status", e);
+        }
     }
 
     @GetMapping("/activity")
@@ -106,44 +128,53 @@ public class UserDashboardController {
               description = "Get personalized security recommendations for the user")
     public ResponseEntity<List<Map<String, Object>>> getSecurityRecommendations(
             @AuthenticationPrincipal UserDetails userDetails) {
-        
-        String username = userDetails.getUsername();
-        List<Map<String, Object>> recommendations = new ArrayList<>();
-        
-        // Check password age
-        LocalDateTime lastPasswordChange = userService.getLastPasswordChangeTime(username);
-        if (lastPasswordChange.isBefore(LocalDateTime.now().minusDays(90))) {
-            recommendations.add(Map.of(
-                "type", "PASSWORD_AGE",
-                "severity", "MEDIUM",
-                "message", "Your password is over 90 days old. Consider changing it.",
-                "action", "CHANGE_PASSWORD"
-            ));
+        try {
+            String username = userDetails.getUsername();
+            log.debug("Fetching security recommendations for user: {}", username);
+            
+            List<Map<String, Object>> recommendations = new ArrayList<>();
+            
+            // Check password age
+            LocalDateTime lastPasswordChange = userService.getLastPasswordChangeTime(username);
+            if (lastPasswordChange.isBefore(LocalDateTime.now().minusDays(90))) {
+                recommendations.add(Map.of(
+                    "type", "PASSWORD_AGE",
+                    "severity", "MEDIUM",
+                    "message", "Your password is over 90 days old. Consider changing it.",
+                    "action", "CHANGE_PASSWORD"
+                ));
+            }
+            
+            // Check for recent suspicious activities
+            List<Map<String, Object>> suspiciousActivities = userService.getRecentSuspiciousActivities(username);
+            if (!suspiciousActivities.isEmpty()) {
+                recommendations.add(Map.of(
+                    "type", "SUSPICIOUS_ACTIVITY",
+                    "severity", "HIGH",
+                    "message", "Suspicious activities detected from unknown locations.",
+                    "action", "REVIEW_ACTIVITIES",
+                    "details", suspiciousActivities
+                ));
+            }
+            
+            // Check MFA status
+            if (!userService.isMfaEnabled(username)) {
+                recommendations.add(Map.of(
+                    "type", "MFA_DISABLED",
+                    "severity", "HIGH",
+                    "message", "Enable two-factor authentication to improve account security.",
+                    "action", "ENABLE_MFA"
+                ));
+            }
+            
+            return ResponseEntity.ok(recommendations);
+        } catch (ResourceNotFoundException | UsernameNotFoundException e) {
+            log.error("Failed to fetch security recommendations", e);
+            throw new ResourceNotFoundException(e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error while fetching security recommendations", e);
+            throw new RuntimeException("Failed to fetch security recommendations", e);
         }
-        
-        // Check for recent suspicious activities
-        List<Map<String, Object>> suspiciousActivities = userService.getRecentSuspiciousActivities(username);
-        if (!suspiciousActivities.isEmpty()) {
-            recommendations.add(Map.of(
-                "type", "SUSPICIOUS_ACTIVITY",
-                "severity", "HIGH",
-                "message", "Suspicious activities detected from unknown locations.",
-                "action", "REVIEW_ACTIVITIES",
-                "details", suspiciousActivities
-            ));
-        }
-        
-        // Check MFA status
-        if (!userService.isMfaEnabled(username)) {
-            recommendations.add(Map.of(
-                "type", "MFA_DISABLED",
-                "severity", "HIGH",
-                "message", "Enable two-factor authentication to improve account security.",
-                "action", "ENABLE_MFA"
-            ));
-        }
-        
-        return ResponseEntity.ok(recommendations);
     }
 
     private UserSecurityStatusDTO buildUserSecurityStatus(String username) {

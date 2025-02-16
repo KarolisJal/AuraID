@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
+
+    <changeSet id="20240216-cleanup-liquibase" author="auraid">
+        <comment>Clean up Liquibase tables and recreate schema</comment>
+        
+        <!-- Drop all tables first -->
+        <sql>
+            DROP TABLE IF EXISTS audit_logs CASCADE;
+            DROP TABLE IF EXISTS user_roles CASCADE;
+            DROP TABLE IF EXISTS verification_tokens CASCADE;
+            DROP TABLE IF EXISTS password_reset_tokens CASCADE;
+            DROP TABLE IF EXISTS users CASCADE;
+            DROP TABLE IF EXISTS roles CASCADE;
+            DROP TABLE IF EXISTS databasechangelog CASCADE;
+            DROP TABLE IF EXISTS databasechangeloglock CASCADE;
+            DROP TABLE IF EXISTS databasechangelog_actions CASCADE;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog> 

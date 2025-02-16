@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
+
+    <!-- First create the tracking table -->
+    <changeSet id="create-tracking-table" author="auraid" runOnChange="false">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="databasechangelog_actions"/>
+            </not>
+        </preConditions>
+        <createTable tableName="databasechangelog_actions">
+            <column name="action_key" type="varchar(255)">
+                <constraints primaryKey="true"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <!-- Then clean up users if not done before -->
+    <changeSet id="20240101-clean-users" author="auraid" runOnChange="false">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM databasechangelog_actions 
+                WHERE action_key = 'initial_cleanup_done'
+            </sqlCheck>
+        </preConditions>
+        
+        <comment>Remove all existing users and their roles</comment>
+        
+        <!-- Delete all existing user data -->
+        <sql>
+            DELETE FROM user_roles;
+            DELETE FROM audit_logs;
+            DELETE FROM users;
+        </sql>
+        
+        <!-- Mark this cleanup as done -->
+        <sql>
+            INSERT INTO databasechangelog_actions (action_key) 
+            VALUES ('initial_cleanup_done')
+            ON CONFLICT DO NOTHING;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog> 

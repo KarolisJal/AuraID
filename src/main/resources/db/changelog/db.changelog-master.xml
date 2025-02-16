@@ -5,11 +5,20 @@
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
 
+    <!-- Create base schema -->
     <changeSet id="1" author="auraid">
         <sqlFile path="schema.sql" relativeToChangelogFile="true"/>
     </changeSet>
 
+    <!-- Insert initial data -->
     <changeSet id="2" author="auraid">
         <sqlFile path="data.sql" relativeToChangelogFile="true"/>
     </changeSet>
+
+    <!-- Include other changes -->
+    <include file="changes/v1.1-add-user-phone.xml" relativeToChangelogFile="true"/>
+    <include file="changes/v1.2-clean-and-admin-setup.xml" relativeToChangelogFile="true"/>
+    <include file="changes/v1.3-add-password-reset-table.xml" relativeToChangelogFile="true"/>
+    <include file="changes/v1.4-add-verification-tokens.xml" relativeToChangelogFile="true"/>
+    <include file="changes/v1.5-modify-audit-logs.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog> 

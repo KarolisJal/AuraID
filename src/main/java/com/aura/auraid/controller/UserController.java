@@ -3,8 +3,13 @@ package com.aura.auraid.controller;
 import com.aura.auraid.dto.CreateUserDTO;
 import com.aura.auraid.dto.UpdateUserDTO;
 import com.aura.auraid.dto.UserDTO;
+import com.aura.auraid.dto.ChangePasswordDTO;
+import com.aura.auraid.dto.UpdateUserRolesDTO;
 import com.aura.auraid.enums.UserStatus;
 import com.aura.auraid.exception.DuplicateResourceException;
+import com.aura.auraid.exception.ResourceNotFoundException;
+import com.aura.auraid.model.User;
+import com.aura.auraid.repository.UserRepository;
 import com.aura.auraid.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -13,6 +18,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,15 +27,22 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.stream.Collectors;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Size;
 
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
 @Tag(name = "Users", description = "User management APIs")
 @SecurityRequirement(name = "bearerAuth")
+@Slf4j
 public class UserController {
 
     private final UserService userService;
+    private final UserRepository userRepository;
 
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(
@@ -154,21 +167,109 @@ public class UserController {
         summary = "Check username availability",
         description = "Check if a username is available for registration"
     )
-    @GetMapping("/check-username")
-    public ResponseEntity<Boolean> checkUsernameAvailability(
-            @Parameter(description = "Username to check") @RequestParam String username) {
-        boolean exists = userService.existsByUsername(username);
-        return ResponseEntity.ok(!exists);
+    @GetMapping({"/check-username", "/check-username/{username}"})
+    @PreAuthorize("permitAll()")
+    public ResponseEntity<Map<String, Object>> checkUsernameAvailability(
+            @Parameter(description = "Username to check") 
+            @PathVariable(required = false) String username,
+            @RequestParam(required = false) @Size(min = 3, max = 20) String usernameParam) {
+        String usernameToCheck = username != null ? username : usernameParam;
+        if (usernameToCheck == null) {
+            throw new IllegalArgumentException("Username must be provided either as path variable or request parameter");
+        }
+        log.debug("Checking username availability for: {}", usernameToCheck);
+        boolean exists = userService.existsByUsername(usernameToCheck);
+        Map<String, Object> response = new HashMap<>();
+        response.put("available", !exists);
+        response.put("username", usernameToCheck);
+        if (exists) {
+            log.debug("Username '{}' is already taken", usernameToCheck);
+            response.put("message", "Username is already taken");
+        } else {
+            log.debug("Username '{}' is available", usernameToCheck);
+        }
+        return ResponseEntity.ok(response);
     }
 
     @Operation(
         summary = "Check email availability",
         description = "Check if an email is available for registration"
     )
-    @GetMapping("/check-email")
-    public ResponseEntity<Boolean> checkEmailAvailability(
-            @Parameter(description = "Email to check") @RequestParam String email) {
-        boolean exists = userService.existsByEmail(email);
-        return ResponseEntity.ok(!exists);
+    @GetMapping({"/check-email", "/check-email/{email}"})
+    @PreAuthorize("permitAll()")
+    public ResponseEntity<Map<String, Object>> checkEmailAvailability(
+            @Parameter(description = "Email to check") 
+            @PathVariable(required = false) String email,
+            @RequestParam(required = false) @Email @Size(max = 50) String emailParam) {
+        String emailToCheck = email != null ? email : emailParam;
+        if (emailToCheck == null) {
+            throw new IllegalArgumentException("Email must be provided either as path variable or request parameter");
+        }
+        log.debug("Checking email availability for: {}", emailToCheck);
+        boolean exists = userService.existsByEmail(emailToCheck);
+        log.debug("Email exists check result: {} for email: {}", exists, emailToCheck);
+        Map<String, Object> response = new HashMap<>();
+        response.put("available", !exists);
+        response.put("email", emailToCheck);
+        if (exists) {
+            log.debug("Email '{}' is already registered", emailToCheck);
+            response.put("message", "Email is already registered");
+        } else {
+            log.debug("Email '{}' is available", emailToCheck);
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/debug/{username}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Debug user data", description = "Debug endpoint to check user data")
+    public ResponseEntity<Map<String, Object>> debugUserData(@PathVariable String username) {
+        try {
+            User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
+            
+            Map<String, Object> userData = new HashMap<>();
+            userData.put("id", user.getId());
+            userData.put("username", user.getUsername());
+            userData.put("email", user.getEmail());
+            userData.put("status", user.getStatus());
+            userData.put("createdAt", user.getCreatedAt());
+            userData.put("updatedAt", user.getUpdatedAt());
+            userData.put("roles", user.getRoles().stream()
+                .map(role -> role.getName().name())
+                .collect(Collectors.toList()));
+            
+            return ResponseEntity.ok(userData);
+        } catch (Exception e) {
+            log.error("Error fetching debug data for user: {}", username, e);
+            throw e;
+        }
+    }
+
+    @PreAuthorize("hasRole('ADMIN') or @securityUtils.isCurrentUser(#username)")
+    @Operation(
+        summary = "Change user password",
+        description = "Change password for a user. Requires current password for verification."
+    )
+    @PostMapping("/{username}/change-password")
+    public ResponseEntity<Void> changePassword(
+            @Parameter(description = "Username") @PathVariable String username,
+            @Valid @RequestBody ChangePasswordDTO changePasswordDTO) {
+        userService.changePassword(username, changePasswordDTO);
+        return ResponseEntity.ok().build();
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+        summary = "Update user roles",
+        description = "Update the roles of a user. The user will always retain the USER role."
+    )
+    @PatchMapping("/{username}/roles")
+    public ResponseEntity<UserDTO> updateUserRoles(
+            @Parameter(description = "Username") @PathVariable String username,
+            @Valid @RequestBody UpdateUserRolesDTO updateUserRolesDTO) {
+        log.debug("Updating roles for user: {}", username);
+        UserDTO updatedUser = userService.updateUserRoles(username, updateUserRolesDTO);
+        return ResponseEntity.ok(updatedUser);
     }
 } 

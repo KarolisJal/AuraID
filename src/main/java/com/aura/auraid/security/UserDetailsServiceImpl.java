@@ -3,6 +3,7 @@ package com.aura.auraid.security;
 import com.aura.auraid.model.User;
 import com.aura.auraid.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserDetailsServiceImpl implements UserDetailsService {
 
     private final UserRepository userRepository;
@@ -21,12 +23,19 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        log.debug("Loading user details for username: {}", username);
+        
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+                .orElseThrow(() -> {
+                    log.error("User not found with username: {}", username);
+                    return new UsernameNotFoundException("User not found with username: " + username);
+                });
 
         var authorities = user.getRoles().stream()
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name()))
                 .collect(Collectors.toSet());
+                
+        log.debug("Found user: {}, with authorities: {}", username, authorities);
 
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getUsername())
