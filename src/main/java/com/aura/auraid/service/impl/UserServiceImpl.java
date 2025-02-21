@@ -290,4 +290,12 @@ public class UserServiceImpl implements UserService {
         
         return userMapper.toDTO(updatedUser);
     }
+
+    @Override
+    public List<UserDTO> getUsersByRole(String roleName) {
+        Role role = roleRepository.findByName(ERole.valueOf(roleName))
+                .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleName));
+        List<User> users = userRepository.findByRolesContaining(role);
+        return userMapper.toDTOList(users);
+    }
 } 

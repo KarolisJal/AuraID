@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
+
+    <changeSet id="20240220-simplify-permissions" author="auraid">
+        <comment>Remove resource_id from resource_permissions table</comment>
+        
+        <!-- Drop foreign key constraint -->
+        <dropForeignKeyConstraint 
+            baseTableName="resource_permissions"
+            constraintName="fk_permission_resource"/>
+
+        <!-- Drop unique constraint -->
+        <dropUniqueConstraint 
+            tableName="resource_permissions"
+            constraintName="uk_resource_permission_name"/>
+
+        <!-- Drop index -->
+        <dropIndex 
+            tableName="resource_permissions"
+            indexName="idx_resource_permissions_resource"/>
+
+        <!-- Drop column -->
+        <dropColumn 
+            tableName="resource_permissions"
+            columnName="resource_id"/>
+    </changeSet>
+</databaseChangeLog> 

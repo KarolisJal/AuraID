@@ -5,13 +5,21 @@
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
 
+    <!-- Initialize Liquibase tables -->
+    <changeSet id="init-liquibase-tables" author="system">
+        <sqlFile path="init-liquibase.sql" relativeToChangelogFile="true"/>
+    </changeSet>
+
+    <!-- Include other changes -->
+    <include file="changes/v1.0-init.xml" relativeToChangelogFile="true"/>
+
     <!-- Create base schema -->
-    <changeSet id="1" author="auraid">
+    <changeSet id="20240101-create-base-schema" author="auraid">
         <sqlFile path="schema.sql" relativeToChangelogFile="true"/>
     </changeSet>
 
     <!-- Insert initial data -->
-    <changeSet id="2" author="auraid">
+    <changeSet id="20240101-insert-initial-data" author="auraid">
         <sqlFile path="data.sql" relativeToChangelogFile="true"/>
     </changeSet>
 
@@ -21,4 +29,30 @@
     <include file="changes/v1.3-add-password-reset-table.xml" relativeToChangelogFile="true"/>
     <include file="changes/v1.4-add-verification-tokens.xml" relativeToChangelogFile="true"/>
     <include file="changes/v1.5-modify-audit-logs.xml" relativeToChangelogFile="true"/>
+
+    <!-- Add workflow tables -->
+    <changeSet id="20240101-create-workflow-tables" author="system">
+        <sqlFile path="create-workflow-tables.sql" relativeToChangelogFile="true"/>
+    </changeSet>
+
+    <!-- Update resources table -->
+    <changeSet id="20240101-update-resources-table" author="system">
+        <sqlFile path="changes/v1.6-update-resources-table.sql" relativeToChangelogFile="true"/>
+    </changeSet>
+
+    <!-- Add notifications table -->
+    <include file="changes/v1.7-add-notifications-table.xml" relativeToChangelogFile="true"/>
+
+    <!-- Add system user -->
+    <include file="changes/v2.1-add-system-user.xml" relativeToChangelogFile="true"/>
+
+    <!-- Add resource permissions table -->
+    <include file="changes/v1.9-add-resource-permissions.xml" relativeToChangelogFile="true"/>
+
+    <!-- Update access requests table -->
+    <include file="changes/v1.8-update-access-requests.xml" relativeToChangelogFile="true"/>
+
+    <!-- Simplify permissions -->
+    <include file="changes/v2.0-simplify-permissions.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog> 

@@ -31,6 +31,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.aura.auraid.security.CustomUserDetails;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -258,14 +260,15 @@ public class AuthServiceImpl implements AuthService {
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name()))
                 .collect(Collectors.toSet());
 
-        return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getUsername())
-                .password(user.getPassword())
-                .authorities(authorities)
-                .accountExpired(false)
-                .accountLocked(user.getStatus() == UserStatus.BLOCKED)
-                .credentialsExpired(false)
-                .disabled(user.getStatus() == UserStatus.INACTIVE)
-                .build();
+        return new CustomUserDetails(
+                user.getId(),
+                user.getUsername(),
+                user.getPassword(),
+                authorities,
+                user.getStatus() != UserStatus.BLOCKED,
+                true,
+                true,
+                user.getStatus() != UserStatus.INACTIVE
+        );
     }
 } 

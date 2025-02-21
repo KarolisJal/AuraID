@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
+
+    <changeSet id="20240220-add-resource-permissions" author="auraid">
+        <comment>Create resource_permissions table</comment>
+        
+        <createTable tableName="resource_permissions">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="resource_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="VARCHAR(500)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Add foreign key constraints -->
+        <addForeignKeyConstraint 
+            baseTableName="resource_permissions"
+            baseColumnNames="resource_id"
+            constraintName="fk_permission_resource"
+            referencedTableName="resources"
+            referencedColumnNames="id"/>
+
+        <addForeignKeyConstraint 
+            baseTableName="resource_permissions"
+            baseColumnNames="created_by"
+            constraintName="fk_permission_created_by"
+            referencedTableName="users"
+            referencedColumnNames="id"/>
+
+        <addForeignKeyConstraint 
+            baseTableName="resource_permissions"
+            baseColumnNames="updated_by"
+            constraintName="fk_permission_updated_by"
+            referencedTableName="users"
+            referencedColumnNames="id"/>
+
+        <!-- Add unique constraint for resource_id and name combination -->
+        <addUniqueConstraint 
+            tableName="resource_permissions"
+            columnNames="resource_id,name"
+            constraintName="uk_resource_permission_name"/>
+
+        <!-- Add indexes for better performance -->
+        <createIndex 
+            indexName="idx_resource_permissions_resource"
+            tableName="resource_permissions">
+            <column name="resource_id"/>
+        </createIndex>
+
+        <createIndex 
+            indexName="idx_resource_permissions_enabled"
+            tableName="resource_permissions">
+            <column name="enabled"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog> 

@@ -1,6 +1,7 @@
 package com.aura.auraid.repository;
 
 import com.aura.auraid.model.User;
+import com.aura.auraid.model.Role;
 import com.aura.auraid.enums.UserStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -36,4 +37,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
 
     long countByStatus(UserStatus status);
+
+    List<User> findByRolesContaining(Role role);
 } 

@@ -1,6 +1,7 @@
 package com.aura.auraid.service;
 
 import com.aura.auraid.config.JwtProperties;
+import com.aura.auraid.security.CustomUserDetails;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,10 @@ public class JwtService {
             .map(GrantedAuthority::getAuthority)
             .toList());
             
+        if (userDetails instanceof CustomUserDetails) {
+            extraClaims.put("userId", ((CustomUserDetails) userDetails).getId());
+        }
+        
         return generateToken(extraClaims, userDetails);
     }
 
@@ -129,6 +134,18 @@ public class JwtService {
                 .collect(Collectors.toList());
         } catch (JwtException | IllegalArgumentException e) {
             return Collections.emptyList();
+        }
+    }
+
+    public Long extractUserId(String token) {
+        if (token == null) {
+            return null;
+        }
+        try {
+            Claims claims = extractAllClaims(token);
+            return claims != null ? claims.get("userId", Long.class) : null;
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
         }
     }
 } 

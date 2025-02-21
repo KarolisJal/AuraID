@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
+
+    <changeSet id="20240220-update-access-requests" author="auraid">
+        <comment>Add missing columns to access_requests table</comment>
+        
+        <!-- Add permission_id column -->
+        <addColumn tableName="access_requests">
+            <column name="permission_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <!-- Add approver_id column -->
+        <addColumn tableName="access_requests">
+            <column name="approver_id" type="BIGINT">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <!-- Add approver_comment column -->
+        <addColumn tableName="access_requests">
+            <column name="approver_comment" type="TEXT">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <!-- Add approved_at column -->
+        <addColumn tableName="access_requests">
+            <column name="approved_at" type="TIMESTAMP">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <!-- Add justification column -->
+        <addColumn tableName="access_requests">
+            <column name="justification" type="TEXT">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <!-- Add foreign key constraints -->
+        <addForeignKeyConstraint 
+            baseTableName="access_requests"
+            baseColumnNames="permission_id"
+            constraintName="fk_access_request_permission"
+            referencedTableName="resource_permissions"
+            referencedColumnNames="id"/>
+
+        <addForeignKeyConstraint 
+            baseTableName="access_requests"
+            baseColumnNames="approver_id"
+            constraintName="fk_access_request_approver"
+            referencedTableName="users"
+            referencedColumnNames="id"/>
+
+        <!-- Add indexes for better performance -->
+        <createIndex 
+            indexName="idx_access_requests_permission"
+            tableName="access_requests">
+            <column name="permission_id"/>
+        </createIndex>
+
+        <createIndex 
+            indexName="idx_access_requests_approver"
+            tableName="access_requests">
+            <column name="approver_id"/>
+        </createIndex>
+
+        <createIndex 
+            indexName="idx_access_requests_status"
+            tableName="access_requests">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog> 

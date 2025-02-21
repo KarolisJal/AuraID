@@ -272,4 +272,15 @@ public class UserController {
         UserDTO updatedUser = userService.updateUserRoles(username, updateUserRolesDTO);
         return ResponseEntity.ok(updatedUser);
     }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+        summary = "Get users by role",
+        description = "Retrieve all users with a specific role"
+    )
+    @GetMapping("/role/{roleName}")
+    public ResponseEntity<List<UserDTO>> getUsersByRole(
+            @Parameter(description = "Role name") @PathVariable String roleName) {
+        return ResponseEntity.ok(userService.getUsersByRole(roleName));
+    }
 } 

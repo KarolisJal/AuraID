@@ -37,14 +37,15 @@ public class UserDetailsServiceImpl implements UserDetailsService {
                 
         log.debug("Found user: {}, with authorities: {}", username, authorities);
 
-        return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getUsername())
-                .password(user.getPassword())
-                .authorities(authorities)
-                .accountExpired(false)
-                .accountLocked(user.getStatus() == com.aura.auraid.enums.UserStatus.BLOCKED)
-                .credentialsExpired(false)
-                .disabled(user.getStatus() == com.aura.auraid.enums.UserStatus.INACTIVE)
-                .build();
+        return new CustomUserDetails(
+            user.getId(),
+            user.getUsername(),
+            user.getPassword(),
+            authorities,
+            !user.getStatus().equals(com.aura.auraid.enums.UserStatus.INACTIVE),  // enabled
+            true,  // accountNonExpired
+            true,  // credentialsNonExpired
+            !user.getStatus().equals(com.aura.auraid.enums.UserStatus.BLOCKED)  // accountNonLocked
+        );
     }
 } 

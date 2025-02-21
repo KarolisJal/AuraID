@@ -6,6 +6,12 @@
                         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
 
     <changeSet id="20240101-add-user-phone" author="auraid">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="users" columnName="phone_number"/>
+            </not>
+        </preConditions>
+        
         <comment>Add phone number column to users table</comment>
         
         <!-- Add the new column -->

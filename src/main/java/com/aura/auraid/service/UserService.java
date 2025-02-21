@@ -16,6 +16,7 @@ public interface UserService {
     UserDTO getUserByUsername(String username);
     List<UserDTO> getAllUsers();
     List<UserDTO> getUsersByStatus(UserStatus status);
+    List<UserDTO> getUsersByRole(String roleName);
     UserDTO updateUser(String username, UpdateUserDTO updateUserDTO);
     void deleteUser(String username);
     void updateUserStatus(String username, UserStatus status);

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.5.xsd">
+
+    <!-- Add roles if they don't exist -->
+    <changeSet id="20240220-add-roles" author="auraid" runOnChange="true">
+        <comment>Add basic roles if they don't exist</comment>
+        
+        <sql dbms="postgresql">
+            INSERT INTO roles (id, name)
+            VALUES (1, 'ADMIN'), (2, 'USER'), (3, 'MODERATOR')
+            ON CONFLICT (id) DO NOTHING;
+        </sql>
+    </changeSet>
+
+    <!-- Add system user if it doesn't exist -->
+    <changeSet id="20240220-add-system-user" author="auraid" runOnChange="true">
+        <comment>Add system user if it doesn't exist</comment>
+        
+        <sql dbms="postgresql">
+            INSERT INTO users (id, username, email, password, first_name, last_name, status, created_at, updated_at)
+            SELECT 1, 'system', 'system@auraid.com', '$2a$10$SYSTEM_UNUSED_PASSWORD_HASH', 'System', 'User', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = 1);
+        </sql>
+    </changeSet>
+
+    <!-- Add system user to admin role if not already assigned -->
+    <changeSet id="20240220-add-system-user-role" author="auraid" runOnChange="true">
+        <comment>Assign admin role to system user if not already assigned</comment>
+        
+        <sql dbms="postgresql">
+            INSERT INTO user_roles (user_id, role_id, created_at)
+            SELECT 1, 1, CURRENT_TIMESTAMP
+            WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = 1 AND role_id = 1);
+        </sql>
+    </changeSet>
+
+</databaseChangeLog> 
