@@ -9,6 +9,8 @@ import com.aura.auraid.dto.PasswordResetDTO;
 import com.aura.auraid.dto.VerificationRequest;
 import com.aura.auraid.service.AuthService;
 import com.aura.auraid.service.EmailService;
+import com.aura.auraid.service.JwtService;
+import com.aura.auraid.service.TokenBlacklistService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -31,6 +33,8 @@ public class AuthController {
     private final AuthService authService;
     private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Operation(
         summary = "Login user",
@@ -63,6 +67,27 @@ public class AuthController {
     public ResponseEntity<VerificationResponse> resetPassword(
             @Valid @RequestBody PasswordResetDTO request) {
         return ResponseEntity.ok(authService.resetPassword(request));
+    }
+
+    @Operation(
+        summary = "Logout user",
+        description = "Invalidate the current JWT token"
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Successfully logged out"
+    )
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String jwt = authHeader.substring(7);
+            // Get token expiration time from JWT service
+            long expirationTime = jwtService.extractExpiration(jwt).getTime();
+            // Add token to blacklist
+            tokenBlacklistService.blacklistToken(jwt, expirationTime);
+            log.info("User token has been blacklisted");
+        }
+        return ResponseEntity.ok().build();
     }
 
     @Operation(
